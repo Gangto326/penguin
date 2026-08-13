@@ -1,0 +1,111 @@
+# 🐧 Penguin — 땜빵 루프 탈출 플러그인
+
+오류에 매몰되어 패치를 쌓다 보면 "동작은 하지만 언제 터질지 모르는" 코드가
+만들어진다. Penguin은 그 순간을 감지하고, 다음 패치를 만들기 전에 문제를
+처음부터 재정의한다.
+
+- **감지는 결정적 계층** — hook이 같은 파일의 연속 수정 횟수를 센다.
+  LLM에게 "네가 루프에 있는지 판단하라"고 맡기지 않는다.
+- **재검토는 LLM** — 임계 도달 시 주입되는 넛지를 받아 `/penguin` 스킬이
+  6단계 질문(패치 계보 → 전제 검증 → 요구 분해 → 수단 재탐색 → 판별 →
+  비용 대조)을 수행한다.
+
+## 구성
+
+| 파일 | 역할 |
+|---|---|
+| `skills/penguin/SKILL.md` | 재검토 본체. `/penguin` 직접 호출 + description 기반 자동 발동 |
+| `hooks/hooks.json` + `scripts/penguin-count.py` | 파일별 연속 수정 카운터. 임계 도달 시 모델에 넛지 주입 + 사용자에게 🐧 알림 표시. 새 사용자 프롬프트마다 리셋 |
+| `scripts/penguin-statusline.py` | (선택) 상태줄에 `🐧 대기` / `🐧 file.py 3회` 표시 |
+| `skills/penguin-debt/SKILL.md` | `/penguin-debt` — "패치 유지" 결정 시 남기는 `penguin:` 주석을 수확해 장부화 |
+| `benchmarks/` | 트레이드오프 장부: 이득(백테스트)과 비용(오발동·중단·시간)을 함께 기록. 발동 로그는 `benchmarks/results/log.md` |
+| `examples/` | 실제 역사 vs Penguin 백테스트 출력의 before/after 대조 (사례 A·B) |
+| `tests/test-hooks.sh` | hook 자가 검증 14케이스 — `bash tests/test-hooks.sh` |
+
+## 언제 발동되나
+
+| 경로 | 상황 |
+|---|---|
+| 직접 호출 `/penguin` | "왜 이 기능만 계속 고치고 있지" 싶을 때 |
+| hook 넛지 (자동) | 한 흐름에서 같은 파일 4회 연속 수정 시 — 사용자가 루프를 인지하지 못해도 발동 |
+| description 자동 | 모델이 스스로 반복 수정·상태 변수 증가를 인지했거나, 사용자가 "이 방향이 맞아?"라고 말할 때 |
+
+공통 전제: **이미 패치를 시도한 뒤**여야 한다. 새 기능을 처음 구현 중일
+때는 발동하지 않는다.
+
+## 결과물 — 보고서
+
+스킬은 절대 스스로 갈아엎지 않는다. 세 층짜리 보고서를 내고 사용자의
+결정을 기다린다: **🐧 한눈 요약**(현상/핵심 원인/권고, 서너 줄) →
+**🔍 상황 설명**(코드를 몰라도 이해되는 시간순 서술) → **⚖️ 권고와
+대안**(옵션마다 "필요한 행동 / 지금 치르는 것 / 그 후에 남는 것" 병렬
+비교). 결함이 없으면 억지 대안 없이 "현 방향이 맞다"로 끝난다.
+
+결정이 "패치 유지"라면 코드에 `# penguin: <남은 전제>, <재검토 트리거>`
+주석이 남고, `/penguin-debt`가 이를 수확한다.
+
+## 설치
+
+**방법 1 — marketplace (상시 사용, 권장):**
+
+```
+/plugin marketplace add ~/Desktop/Penguin-skill/Penguin
+/plugin install penguin@penguin
+```
+
+설치 후 `/reload-plugins` 안내가 뜨면 실행. 스킬은 `/penguin` (겹치면
+`/penguin:penguin`)으로 호출된다. 소스를 수정했다면
+`.claude-plugin/plugin.json`의 version을 올리고
+`/plugin marketplace update penguin` 후 재설치해야 반영된다 (설치본은
+캐시 복사본이므로).
+
+GitHub에 올린 뒤에는 경로 대신 `owner/repo`로 추가할 수 있다:
+`/plugin marketplace add <owner>/<repo>`
+
+**방법 2 — 세션 한정 테스트:**
+
+```bash
+claude --plugin-dir ~/Desktop/Penguin-skill/Penguin
+```
+
+### statusline (선택)
+
+`~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/path/to/penguin/scripts/penguin-statusline.py"
+  }
+}
+```
+
+이미 statusline을 쓰고 있다면 기존 스크립트 끝에 이 스크립트 출력을 이어
+붙이면 된다.
+
+## 발동 조건과 임계 조정
+
+기본 임계는 **같은 파일 4회 연속 수정**(사용자 프롬프트 사이 기준)이고,
+도달 이후에도 수정이 계속되면 2회마다 재발동한다.
+
+> 임계 근거: 출발 사례 백테스트에서 적정 발동 시점은 보정 2회째였지만,
+> hook은 "실패 후 보정"과 "정상적인 연속 편집"을 구분하지 못하므로
+> 오발동을 줄이기 위해 여유를 둔 4로 시작한다. 운영하며 보정할 것.
+
+조정 방법 (우선순위 순):
+
+1. 환경 변수: `PENGUIN_THRESHOLD=3 claude ...`
+2. 파일: `<프로젝트>/.claude/penguin/threshold` 에 숫자 한 줄
+
+상태 파일은 `<프로젝트>/.claude/penguin/<session_id>.state.json` 에
+저장된다. git 저장소라면 `.claude/penguin/` 을 `.gitignore` 에 추가할 것.
+
+## 검증 상태
+
+- hook 단위 테스트 14케이스 (`tests/test-hooks.sh`) — 통과
+- 실세션 e2e: `--plugin-dir` 설치 후 4회 수정 시나리오에서 넛지 발동·
+  오발동 경량 통과 확인
+- 출발 사례 백테스트 2건: 실제 땜빵 루프 역사의 "패치 도중" 시점을
+  블라인드로 주고 실행 → 실제 역사가 우회 끝에 도달한 결론을 더 이른
+  시점에 재현 (`benchmarks/results/`)
