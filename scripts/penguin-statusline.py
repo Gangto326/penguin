@@ -22,7 +22,12 @@ def main():
         or data.get("cwd")
         or "."
     )
-    state_dir = os.path.join(project_dir, ".claude", "penguin")
+    config_dir = os.path.join(project_dir, ".claude", "penguin")
+    # hook(penguin-count.py)과 같은 상태 경로를 재구성한다 — statusline 에는
+    # CLAUDE_PLUGIN_DATA 가 보장되지 않으므로 동일한 고정 폴백을 쓴다.
+    state_dir = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
+        os.path.join("~", ".claude", "plugins", "data", "penguin")
+    )
     session_id = data.get("session_id") or "default"
     state_path = os.path.join(state_dir, f"{session_id}.state.json")
 
@@ -31,7 +36,7 @@ def main():
         if v.strip().isdigit():
             return int(v)
         try:
-            with open(os.path.join(state_dir, "threshold")) as f:
+            with open(os.path.join(config_dir, "threshold")) as f:
                 return int(f.read().strip())
         except Exception:
             return 4

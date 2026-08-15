@@ -8,6 +8,7 @@ SL="$DIR/scripts/penguin-statusline.py"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export CLAUDE_PROJECT_DIR="$TMP"
+export CLAUDE_PLUGIN_DATA="$TMP/plugin-data"
 unset PENGUIN_THRESHOLD 2>/dev/null
 
 pass=0; fail=0
@@ -59,6 +60,19 @@ check "statusline 상태 없음 → 대기" "🐧 대기" \
 out="$(echo 'not json' | python3 "$COUNT")"; rc=$?
 check "깨진 JSON 무시" "없음" "$out"
 check "깨진 JSON exit 0" "0" "$rc"
+
+# 8) 오래된 상태 파일 청소 (UserPromptSubmit 시, 기준 7일)
+mkdir -p "$CLAUDE_PLUGIN_DATA"
+touch -t 202001010000 "$CLAUDE_PLUGIN_DATA/old.state.json"
+echo '{"counts":{}}' > "$CLAUDE_PLUGIN_DATA/fresh.state.json"
+prompt s1
+check "7일 넘은 state 삭제" "없음" \
+  "$(ls "$CLAUDE_PLUGIN_DATA" | grep '^old\.state\.json$' || true)"
+check "최근 state 보존" "fresh.state.json" "$(ls "$CLAUDE_PLUGIN_DATA")"
+
+# 9) 상태 파일이 프로젝트에 생기지 않음
+check "프로젝트 내 state 없음" "없음" \
+  "$(ls "$TMP/.claude/penguin" 2>/dev/null | grep 'state\.json' || true)"
 
 echo "----------------------------------------"
 echo "통과 $pass / 실패 $fail"

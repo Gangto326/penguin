@@ -28,7 +28,7 @@
 | `skills/penguin-debt/SKILL.md` | `/penguin-debt` — "패치 유지" 결정 시 남기는 `penguin:` 주석을 수확해 장부화 |
 | `benchmarks/` | 트레이드오프 장부: 이득(백테스트)과 비용(오발동·중단·시간)을 함께 기록. 발동 로그는 `benchmarks/results/log.md` |
 | `examples/` | 실제 역사 vs Penguin 백테스트 출력의 before/after 대조 (사례 A·B) |
-| `tests/test-hooks.sh` | hook 자가 검증 14케이스 — `bash tests/test-hooks.sh` |
+| `tests/test-hooks.sh` | hook 자가 검증 17케이스 — `bash tests/test-hooks.sh` |
 
 ## 언제 발동되나
 
@@ -118,12 +118,16 @@ claude --plugin-dir ~/Desktop/Penguin-skill/Penguin
 1. 환경 변수: `PENGUIN_THRESHOLD=3 claude ...`
 2. 파일: `<프로젝트>/.claude/penguin/threshold` 에 숫자 한 줄
 
-상태 파일은 `<프로젝트>/.claude/penguin/<session_id>.state.json` 에
-저장된다. git 저장소라면 `.claude/penguin/` 을 `.gitignore` 에 추가할 것.
+상태 파일은 플러그인 데이터 디렉토리
+`~/.claude/plugins/data/penguin/<session_id>.state.json`(hook에는
+`CLAUDE_PLUGIN_DATA`로 전달되는 문서화된 경로)에 저장된다. 매 프롬프트마다
+7일 넘은 상태 파일이 자동 청소되고, 플러그인 제거 시 디렉토리째 삭제된다.
+프로젝트에는 사용자 설정인 `.claude/penguin/threshold`만 남으므로
+`.gitignore` 조치가 필요 없다.
 
 ## 검증 상태
 
-- hook 단위 테스트 14케이스 (`tests/test-hooks.sh`) — 통과
+- hook 단위 테스트 17케이스 (`tests/test-hooks.sh`) — 통과
 - 실세션 e2e: `--plugin-dir` 설치 후 4회 수정 시나리오에서 넛지 발동·
   오발동 경량 통과 확인
 - 출발 사례 백테스트 2건: 실제 땜빵 루프 역사의 "패치 도중" 시점을

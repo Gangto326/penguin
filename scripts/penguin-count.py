@@ -2,11 +2,20 @@
 """Penguin hook — 같은 파일의 연속 수정을 세고, 임계 도달 시 재검토 넛지를 주입한다.
 
 PostToolUse(Edit|Write 계열): 카운트 증가, 임계 도달 시 additionalContext + systemMessage 출력.
-UserPromptSubmit: 카운터 리셋 (새 사용자 프롬프트 = 새 흐름).
+UserPromptSubmit: 카운터 리셋 (새 사용자 프롬프트 = 새 흐름) + 오래된 상태 파일 청소.
+
+상태는 플러그인 데이터 디렉토리(CLAUDE_PLUGIN_DATA)에, 사용자 설정(threshold)은
+프로젝트 .claude/penguin/ 에 둔다 — 상태는 수명이 한 흐름인 임시 데이터,
+설정은 영속 데이터라 위치가 다르다.
 """
 import json
 import os
 import sys
+import time
+
+# 상태 수명은 "한 프롬프트 흐름"(매 프롬프트 리셋)이라 청소 기준은 세션보다
+# 길기만 하면 되고, 오삭제의 비용은 카운트 리셋 1회뿐이다.
+STALE_DAYS = 7
 
 
 def main():
@@ -16,7 +25,12 @@ def main():
         return
 
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or "."
-    state_dir = os.path.join(project_dir, ".claude", "penguin")
+    config_dir = os.path.join(project_dir, ".claude", "penguin")
+    # statusline 프로세스에는 CLAUDE_PLUGIN_DATA 환경 변수가 보장되지 않으므로,
+    # 폴백은 두 스크립트가 동일하게 재구성할 수 있는 문서화된 고정 경로여야 한다.
+    state_dir = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
+        os.path.join("~", ".claude", "plugins", "data", "penguin")
+    )
     session_id = data.get("session_id") or "default"
     state_path = os.path.join(state_dir, f"{session_id}.state.json")
     event = data.get("hook_event_name", "")
@@ -33,19 +47,36 @@ def main():
         with open(state_path, "w") as f:
             json.dump(state, f, ensure_ascii=False)
 
+    def cleanup_stale_states():
+        cutoff = time.time() - STALE_DAYS * 86400
+        try:
+            names = os.listdir(state_dir)
+        except OSError:
+            return
+        for name in names:
+            if not name.endswith(".state.json") or name == f"{session_id}.state.json":
+                continue
+            path = os.path.join(state_dir, name)
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+            except OSError:
+                pass
+
     def threshold():
         # 우선순위: 환경 변수 PENGUIN_THRESHOLD > .claude/penguin/threshold 파일 > 기본 4
         v = os.environ.get("PENGUIN_THRESHOLD", "")
         if v.strip().isdigit():
             return int(v)
         try:
-            with open(os.path.join(state_dir, "threshold")) as f:
+            with open(os.path.join(config_dir, "threshold")) as f:
                 return int(f.read().strip())
         except Exception:
             return 4
 
     if event == "UserPromptSubmit":
         save_state({"counts": {}})
+        cleanup_stale_states()
         return
 
     if event != "PostToolUse":
