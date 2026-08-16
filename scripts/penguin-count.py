@@ -54,7 +54,10 @@ def main():
         except OSError:
             return
         for name in names:
-            if not name.endswith(".state.json") or name == f"{session_id}.state.json":
+            # 세션 상태와 검증 예산 카운터를 함께 수거한다
+            if not name.endswith((".state.json", ".count")):
+                continue
+            if name == f"{session_id}.state.json":
                 continue
             path = os.path.join(state_dir, name)
             try:
@@ -64,10 +67,17 @@ def main():
                 pass
 
     def threshold():
-        # 우선순위: 환경 변수 PENGUIN_THRESHOLD > .claude/penguin/threshold 파일 > 기본 4
+        # 우선순위: PENGUIN_THRESHOLD env > config.json > 레거시 threshold 파일 > 기본 4
         v = os.environ.get("PENGUIN_THRESHOLD", "")
         if v.strip().isdigit():
             return int(v)
+        try:
+            with open(os.path.join(config_dir, "config.json")) as f:
+                t = json.load(f).get("threshold")
+            if isinstance(t, int) and t > 0:
+                return t
+        except Exception:
+            pass
         try:
             with open(os.path.join(config_dir, "threshold")) as f:
                 return int(f.read().strip())

@@ -36,6 +36,13 @@ def main():
         if v.strip().isdigit():
             return int(v)
         try:
+            with open(os.path.join(config_dir, "config.json")) as f:
+                t = json.load(f).get("threshold")
+            if isinstance(t, int) and t > 0:
+                return t
+        except Exception:
+            pass
+        try:
             with open(os.path.join(config_dir, "threshold")) as f:
                 return int(f.read().strip())
         except Exception:

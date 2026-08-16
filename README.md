@@ -25,10 +25,14 @@
 | `hooks/hooks.json` + `scripts/penguin-count.py` | 파일별 연속 수정 카운터. 임계 도달 시 모델에 넛지 주입 + 사용자에게 🐧 알림 표시. 새 사용자 프롬프트마다 리셋 |
 | `scripts/penguin-statusline.py` | (선택) 상태줄에 `🐧 대기` / `🐧 file.py 3회` 표시 |
 | `skills/penguin-verify/SKILL.md` | `/penguin-verify` — 보고서 출력 직후 자동 실행되는 분리 검증 (반박자 + 사실 조사자 서브에이전트) |
+| `skills/penguin-config/SKILL.md` | `/penguin-config` — 프로젝트 설정 조회·변경 (선택 UI 포함) |
 | `skills/penguin-debt/SKILL.md` | `/penguin-debt` — "패치 유지" 결정 시 남기는 `penguin:` 주석을 수확해 장부화 |
+| `agents/penguin-verifier.md` | 검증자 전용 에이전트 타입 — 예산 hook의 표적, 읽기 전용 |
+| `scripts/penguin-verify-budget.py` | PreToolUse hook — 검증자 도구 호출 예산의 결정적 집행 |
+| `scripts/penguin-config-gate.py` | PreToolUse hook — `verify_chain`·`debt_comments` off의 결정적 집행 |
 | `benchmarks/` | 트레이드오프 장부: 이득(백테스트)과 비용(오발동·중단·시간)을 함께 기록. 발동 로그는 `benchmarks/results/log.md` |
 | `examples/` | 실제 역사 vs Penguin 백테스트 출력의 before/after 대조 (사례 A·B) |
-| `tests/test-hooks.sh` | hook 자가 검증 17케이스 — `bash tests/test-hooks.sh` |
+| `tests/test-hooks.sh` | hook 자가 검증 31케이스 — `bash tests/test-hooks.sh` |
 
 ## 언제 발동되나
 
@@ -104,7 +108,7 @@ claude --plugin-dir ~/Desktop/Penguin-skill/Penguin
 이미 statusline을 쓰고 있다면 기존 스크립트 끝에 이 스크립트 출력을 이어
 붙이면 된다.
 
-## 발동 조건과 임계 조정
+## 발동 조건
 
 기본 임계는 **같은 파일 4회 연속 수정**(사용자 프롬프트 사이 기준)이고,
 도달 이후에도 수정이 계속되면 2회마다 재발동한다.
@@ -113,10 +117,26 @@ claude --plugin-dir ~/Desktop/Penguin-skill/Penguin
 > hook은 "실패 후 보정"과 "정상적인 연속 편집"을 구분하지 못하므로
 > 오발동을 줄이기 위해 여유를 둔 4로 시작한다. 운영하며 보정할 것.
 
-조정 방법 (우선순위 순):
+## 설정 — `/penguin-config`
 
-1. 환경 변수: `PENGUIN_THRESHOLD=3 claude ...`
-2. 파일: `<프로젝트>/.claude/penguin/threshold` 에 숫자 한 줄
+프로젝트별 설정은 `<프로젝트>/.claude/penguin/config.json` 한 파일이고,
+`/penguin-config`로 조회·변경한다 (인자 없이 부르면 선택 UI, `/penguin-config
+verify_chain off`처럼 인자로 직접 설정도 가능):
+
+| 키 | 값 | 기본 | 집행 |
+|---|---|---|---|
+| `threshold` | 양의 정수 | 4 | hook (결정적) |
+| `verify_budget` | 0 / 15 / 30 / 50 / "unlimited" | 15 | hook (결정적 — 검증자당 도구 호출 상한, 초과분 물리 차단) |
+| `verify_chain` | true / false | true | hook (결정적 — off면 자동 검증 호출 차단, 수동 `/penguin-verify`는 무관) |
+| `debt_comments` | true / false | true | hook (결정적 — off면 `penguin:` 주석 신규 작성 차단) |
+
+`verify_budget` 감각: 호출 1회 = 파일 읽기·검색·문서 조회 하나. 실측 환산
+(실전 2건 기준, 추정)으로 15회 ≈ 검증자당 3만~5만 토큰, 수 분. 0은 조회
+없이 보고서 내부 논리만 검증하는 초경량 모드.
+
+환경 변수 `PENGUIN_THRESHOLD`·`PENGUIN_VERIFY_BUDGET`가 있으면 파일보다
+우선한다. 레거시 `<프로젝트>/.claude/penguin/threshold` 파일(숫자 한 줄)도
+계속 읽힌다 (우선순위: env > config.json > 레거시 파일 > 기본값).
 
 상태 파일은 플러그인 데이터 디렉토리
 `~/.claude/plugins/data/penguin/<session_id>.state.json`(hook에는
@@ -127,7 +147,10 @@ claude --plugin-dir ~/Desktop/Penguin-skill/Penguin
 
 ## 검증 상태
 
-- hook 단위 테스트 17케이스 (`tests/test-hooks.sh`) — 통과
+- hook 단위 테스트 31케이스 (`tests/test-hooks.sh`) — 통과
+- hook 실측 PoC 3건 (Claude Code 2.1.231~2.1.233, darwin): Stop hook 발동,
+  PreToolUse의 서브에이전트 발동·`agent_id` 식별·deny 전달, Skill 도구
+  호출 차단과 사용자 슬래시 명령의 hook 우회
 - 실세션 e2e: `--plugin-dir` 설치 후 4회 수정 시나리오에서 넛지 발동·
   오발동 경량 통과 확인
 - 출발 사례 백테스트 2건: 실제 땜빵 루프 역사의 "패치 도중" 시점을
