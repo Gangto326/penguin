@@ -12,18 +12,10 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import penguin_config_lib as cfglib  # noqa: E402
+
 MARKER = re.compile(r"(#|//|/\*|<!--|--)\s*penguin:")
-
-
-def load_config(project_dir):
-    try:
-        with open(
-            os.path.join(project_dir, ".claude", "penguin", "config.json")
-        ) as f:
-            cfg = json.load(f)
-        return cfg if isinstance(cfg, dict) else {}
-    except Exception:
-        return {}
 
 
 def deny(reason):
@@ -70,9 +62,9 @@ def main():
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input") or {}
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or "."
-    cfg = load_config(project_dir)
+    cfg = cfglib.load_config(project_dir)
 
-    if tool_name == "Skill" and cfg.get("verify_chain") is False:
+    if tool_name == "Skill" and not cfglib.toggle("verify_chain", project_dir, cfg):
         if "penguin-verify" in str(tool_input.get("skill", "")):
             deny(
                 "🐧 자동 검증이 설정으로 꺼져 있다(verify_chain=off). 스킬을 "
@@ -81,7 +73,7 @@ def main():
             )
             return
 
-    if cfg.get("debt_comments") is False and tool_name in (
+    if not cfglib.toggle("debt_comments", project_dir, cfg) and tool_name in (
         "Edit",
         "Write",
         "MultiEdit",

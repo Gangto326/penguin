@@ -13,6 +13,9 @@ import os
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import penguin_config_lib as cfglib  # noqa: E402
+
 # 상태 수명은 "한 프롬프트 흐름"(매 프롬프트 리셋)이라 청소 기준은 세션보다
 # 길기만 하면 되고, 오삭제의 비용은 카운트 리셋 1회뿐이다.
 STALE_DAYS = 7
@@ -25,12 +28,9 @@ def main():
         return
 
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or "."
-    config_dir = os.path.join(project_dir, ".claude", "penguin")
     # statusline 프로세스에는 CLAUDE_PLUGIN_DATA 환경 변수가 보장되지 않으므로,
     # 폴백은 두 스크립트가 동일하게 재구성할 수 있는 문서화된 고정 경로여야 한다.
-    state_dir = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
-        os.path.join("~", ".claude", "plugins", "data", "penguin")
-    )
+    state_dir = cfglib.state_dir()
     session_id = data.get("session_id") or "default"
     state_path = os.path.join(state_dir, f"{session_id}.state.json")
     event = data.get("hook_event_name", "")
@@ -67,22 +67,7 @@ def main():
                 pass
 
     def threshold():
-        # 우선순위: PENGUIN_THRESHOLD env > config.json > 레거시 threshold 파일 > 기본 4
-        v = os.environ.get("PENGUIN_THRESHOLD", "")
-        if v.strip().isdigit():
-            return int(v)
-        try:
-            with open(os.path.join(config_dir, "config.json")) as f:
-                t = json.load(f).get("threshold")
-            if isinstance(t, int) and t > 0:
-                return t
-        except Exception:
-            pass
-        try:
-            with open(os.path.join(config_dir, "threshold")) as f:
-                return int(f.read().strip())
-        except Exception:
-            return 4
+        return cfglib.threshold(project_dir)
 
     if event == "UserPromptSubmit":
         save_state({"counts": {}})

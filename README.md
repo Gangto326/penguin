@@ -30,6 +30,9 @@
 | `agents/penguin-verifier.md` | 검증자 전용 에이전트 타입 — 예산 hook의 표적, 읽기 전용 |
 | `scripts/penguin-verify-budget.py` | PreToolUse hook — 검증자 도구 호출 예산의 결정적 집행 |
 | `scripts/penguin-config-gate.py` | PreToolUse hook — `verify_chain`·`debt_comments` off의 결정적 집행 |
+| `scripts/penguin-config-write-guard.py` | PreToolUse hook — config.json에 해석 불가 값이 저장되는 것을 거부 |
+| `scripts/penguin_config_lib.py` | 설정 읽기·정규화 공유 모듈 (`on`/`"3"` 같은 표기도 해석, bool→숫자 누수 차단) |
+| `benchmarks/measurements.md` | 환경 실측 대장 — 관측과 버전만, 판단 금지. 검증자가 문서 조회 전에 읽는다 |
 | `benchmarks/` | 트레이드오프 장부: 이득(백테스트)과 비용(오발동·중단·시간)을 함께 기록. 발동 로그는 `benchmarks/results/log.md` |
 | `examples/` | 실제 역사 vs Penguin 백테스트 출력의 before/after 대조 (사례 A·B) |
 | `tests/test-hooks.sh` | hook 자가 검증 31케이스 — `bash tests/test-hooks.sh` |
@@ -125,10 +128,15 @@ verify_chain off`처럼 인자로 직접 설정도 가능):
 
 | 키 | 값 | 기본 | 집행 |
 |---|---|---|---|
-| `threshold` | 양의 정수 | 4 | hook (결정적) |
-| `verify_budget` | 0 / 15 / 30 / 50 / "unlimited" | 15 | hook (결정적 — 검증자당 도구 호출 상한, 초과분 물리 차단) |
+| `threshold` | 1 이상의 정수 | 4 | hook (결정적) |
+| `verify_budget` | 0 이상의 정수 또는 `"unlimited"` | 15 | hook (결정적 — 검증 1회당 tool 호출 상한, 초과분 물리 차단) |
 | `verify_chain` | true / false | true | hook (결정적 — off면 자동 검증 호출 차단, 수동 `/penguin-verify`는 무관) |
 | `debt_comments` | true / false | true | hook (결정적 — off면 `penguin:` 주석 신규 작성 차단) |
+
+값 표기는 관대하고 저장은 엄격합니다: 읽을 때는 `on`/`off`/`"3"` 같은
+표기도 해석하지만(`penguin_config_lib`), config.json에 해석 불가 값이
+저장되려 하면 쓰기 검증 hook이 거부합니다 — 오타가 "조용히 무시"되는 대신
+그 자리에서 드러납니다.
 
 `verify_budget` 감각: 호출 1회 = 파일 읽기·검색·문서 조회 하나. 실측 환산
 (실전 2건 기준, 추정)으로 15회 ≈ 검증자당 3만~5만 토큰, 수 분. 0은 조회
@@ -147,10 +155,11 @@ verify_chain off`처럼 인자로 직접 설정도 가능):
 
 ## 검증 상태
 
-- hook 단위 테스트 31케이스 (`tests/test-hooks.sh`) — 통과
-- hook 실측 PoC 3건 (Claude Code 2.1.231~2.1.233, darwin): Stop hook 발동,
-  PreToolUse의 서브에이전트 발동·`agent_id` 식별·deny 전달, Skill 도구
-  호출 차단과 사용자 슬래시 명령의 hook 우회
+- hook 단위 테스트 48케이스 (`tests/test-hooks.sh`) — 통과
+- hook 실측 PoC 4건 (Claude Code 2.1.231~2.1.233, darwin) — 원문은
+  `benchmarks/measurements.md`: Stop hook 발동, PreToolUse의 서브에이전트
+  발동·`agent_id` 식별·deny 전달, Skill 도구 호출 차단과 사용자 슬래시
+  명령의 hook 우회, AskUserQuestion 입력 제약
 - 실세션 e2e: `--plugin-dir` 설치 후 4회 수정 시나리오에서 넛지 발동·
   오발동 경량 통과 확인
 - 출발 사례 백테스트 2건: 실제 땜빵 루프 역사의 "패치 도중" 시점을

@@ -7,6 +7,7 @@ COUNT="$DIR/scripts/penguin-count.py"
 SL="$DIR/scripts/penguin-statusline.py"
 BUDGET="$DIR/scripts/penguin-verify-budget.py"
 GATE="$DIR/scripts/penguin-config-gate.py"
+WGUARD="$DIR/scripts/penguin-config-write-guard.py"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export CLAUDE_PROJECT_DIR="$TMP"
@@ -132,6 +133,50 @@ echo '{"threshold":3}' > "$CFG"
 out=""; for i in 1 2 3; do out="$(edit s4 /a/i.py)"; done
 check "config threshold=3, 3회째 발동" "3회 연속" "$out"
 rm "$CFG"
+
+# 17) 값 정규화 — 문자열 표기도 집행된다
+echo '{"verify_chain":"off"}' > "$CFG"
+check "문자열 \"off\": chain 차단" "deny" \
+  "$(gate '{"hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"penguin:penguin-verify"}}')"
+echo '{"debt_comments":"false"}' > "$CFG"
+check "문자열 \"false\": 주석 차단" "deny" \
+  "$(gate '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/a.py","old_string":"x","new_string":"x  # penguin: p, t"}}')"
+echo '{"verify_budget":"2"}' > "$CFG"
+vb agS penguin-verifier > /dev/null; vb agS penguin-verifier > /dev/null
+check "문자열 \"2\": 예산 3회째 거부" "deny" "$(vb agS penguin-verifier)"
+echo '{"threshold":"3"}' > "$CFG"
+out=""; for i in 1 2 3; do out="$(edit s5 /a/j.py)"; done
+check "문자열 \"3\": threshold 발동" "3회 연속" "$out"
+
+# 18) 정규화 가드 — bool 은 숫자로 새지 않는다
+echo '{"threshold":true}' > "$CFG"
+out=""; for i in 1 2 3; do out="$(edit s6 /a/k.py)"; done
+check "threshold=true 는 default(4) 로" "없음" "$out"
+echo '{"verify_budget":false}' > "$CFG"
+check "verify_budget=false 는 default(15) 로" "없음" "$(vb agT penguin-verifier)"
+rm "$CFG"
+check "PENGUIN_THRESHOLD=0 은 무시" "없음" "$(PENGUIN_THRESHOLD=0 edit s7 /a/l.py)"
+
+# 19) 해석 불가 값 — default 로 낙하
+echo '{"verify_chain":"of"}' > "$CFG"
+check "오타 \"of\": 차단 안 함(default on)" "없음" \
+  "$(gate '{"hook_event_name":"PreToolUse","tool_name":"Skill","tool_input":{"skill":"penguin:penguin-verify"}}')"
+rm "$CFG"
+
+# 20) 쓰기 시점 검증 hook
+wg() { # 파일경로, 저장하려는 내용
+  python3 -c 'import json,sys; print(json.dumps({"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":sys.argv[1],"content":sys.argv[2]}}))' \
+    "$1" "$2" | python3 "$WGUARD"
+}
+check "쓰기 검증: 올바른 값 통과" "없음" "$(wg "$CFG" '{"threshold":3,"verify_chain":false}')"
+check "쓰기 검증: 해석 불가 값 거부" "deny" "$(wg "$CFG" '{"verify_chain":"of"}')"
+check "쓰기 검증: 음수 거부" "deny" "$(wg "$CFG" '{"threshold":-1}')"
+check "쓰기 검증: 0 은 threshold 에서 거부" "deny" "$(wg "$CFG" '{"threshold":0}')"
+check "쓰기 검증: unlimited 통과" "없음" "$(wg "$CFG" '{"verify_budget":"unlimited"}')"
+check "쓰기 검증: 문자열 \"30\" 통과" "없음" "$(wg "$CFG" '{"verify_budget":"30"}')"
+check "쓰기 검증: 모르는 키 거부" "deny" "$(wg "$CFG" '{"threshhold":4}')"
+check "쓰기 검증: 깨진 JSON 거부" "deny" "$(wg "$CFG" '{oops')"
+check "쓰기 검증: 다른 파일은 무간섭" "없음" "$(wg /tmp/other.json '{"verify_chain":"of"}')"
 
 echo "----------------------------------------"
 echo "통과 $pass / 실패 $fail"

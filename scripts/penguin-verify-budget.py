@@ -3,16 +3,17 @@
 
 메인 에이전트(stdin에 agent_id 없음)와 다른 서브에이전트는 건드리지 않는다.
 예산 우선순위: PENGUIN_VERIFY_BUDGET 환경 변수 > .claude/penguin/config.json
-의 verify_budget > 기본 15. 값은 0(조회 금지)/양의 정수/"unlimited".
-초과 시 permissionDecision=deny 로 거부하고 "미탐색으로 분류하고 마무리
-하라"는 지시를 모델에 전달한다 (사유는 deny 시 모델에게 전달됨 — 공식
-hook 문서 보장).
+의 verify_budget > 기본 15. 값은 0(조회 금지)/양의 정수/"unlimited" 이며
+표기는 penguin_config_lib 가 정규화한다. 초과 시 permissionDecision=deny 로
+거부하고 "미탐색으로 분류하고 마무리하라"는 지시를 모델에 전달한다 (사유는
+deny 시 모델에게 전달됨 — 공식 hook 문서 보장).
 """
 import json
 import os
 import sys
 
-DEFAULT_BUDGET = 15
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import penguin_config_lib as cfglib  # noqa: E402
 
 
 def main():
@@ -28,31 +29,7 @@ def main():
         return
 
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or "."
-
-    def budget():
-        # 반환: 정수 상한, 또는 None(무제한)
-        v = os.environ.get("PENGUIN_VERIFY_BUDGET", "").strip()
-        if v:
-            if v.lower() == "unlimited":
-                return None
-            if v.isdigit():
-                return int(v)
-        try:
-            with open(
-                os.path.join(project_dir, ".claude", "penguin", "config.json")
-            ) as f:
-                b = json.load(f).get("verify_budget")
-            if b == "unlimited":
-                return None
-            if isinstance(b, int) and b >= 0:
-                return b
-        except Exception:
-            pass
-        return DEFAULT_BUDGET
-
-    state_dir = os.environ.get("CLAUDE_PLUGIN_DATA") or os.path.expanduser(
-        os.path.join("~", ".claude", "plugins", "data", "penguin")
-    )
+    state_dir = cfglib.state_dir()
     counter_path = os.path.join(state_dir, f"verify-{agent_id}.count")
     try:
         with open(counter_path) as f:
@@ -67,7 +44,7 @@ def main():
     except OSError:
         return  # 카운터를 못 쓰면 집행 불능 — 조용히 허용 (검증 자체를 막지 않는다)
 
-    limit = budget()
+    limit = cfglib.verify_budget(project_dir)
     if limit is None or count <= limit:
         return
 
