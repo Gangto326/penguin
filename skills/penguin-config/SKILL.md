@@ -19,7 +19,7 @@ argument-hint: "[키] [값]"
 | 키 | 허용 값 | default | config.json 기록 타입 | 집행 |
 |---|---|---|---|---|
 | `threshold` | 1 이상의 정수 | `4` | 숫자 | hook (결정적) |
-| `verify_budget` | 0 이상의 정수 또는 `unlimited` | `15` | 숫자 또는 `"unlimited"` | hook (결정적 — 초과 조회 차단) |
+| `verify_budget` | 0(조회 금지) 이상의 정수 또는 `unlimited` | `15` | 숫자 또는 `"unlimited"` | hook (결정적 — 초과 조회 차단) |
 | `verify_chain` | true / false | `true` | 불리언 | hook (결정적 — 자동 호출 차단, 수동 `/penguin-verify` 는 무관) |
 | `debt_comments` | true / false | `true` | 불리언 | hook (결정적 — 주석 신규 작성 차단) |
 
@@ -33,7 +33,8 @@ argument-hint: "[키] [값]"
 하지 마라 — 애매하면 default 다.
 
 읽기 우선순위는 **env > config.json > 레거시 `.claude/penguin/threshold`
-파일 > default** 다 (hook 도 같은 순서를 쓴다) — 현재값을 보여줄 때 이
+파일 > default** 다 (hook 도 같은 순서를 쓴다; 레거시 파일 폴백은
+`threshold` 에만 해당한다) — 현재값을 보여줄 때 이
 순서를 따르지 않으면 화면과 실제 동작이 어긋난다. env 가 설정돼 있으면
 파일을 바꿔도 env 가 이긴다는 것을 사용자에게 알려라.
 

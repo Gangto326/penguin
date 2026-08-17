@@ -1,7 +1,7 @@
 {
   "name": "penguin",
   "description": "땜빵 루프 탈출 — 같은 파일의 반복 수정을 hook이 감지하고, 다음 패치를 만들기 전에 문제를 처음부터 재정의하는 재검토 스킬",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "author": {
     "name": "Gangto326"
   }
