@@ -27,6 +27,7 @@
 | `skills/penguin-verify/SKILL.md` | `/penguin-verify` — 보고서 출력 직후 자동 실행되는 분리 검증 (반박자 + 사실 조사자 서브에이전트) |
 | `skills/penguin-config/SKILL.md` | `/penguin-config` — 프로젝트 설정 조회·변경 (선택 UI 포함) |
 | `skills/penguin-debt/SKILL.md` | `/penguin-debt` — "패치 유지" 결정 시 남기는 `penguin:` 주석을 수확해 장부화 |
+| `skills/penguin-help/SKILL.md` | `/penguin-help` — 처음 사용자용 한 화면 안내 (흐름·스킬 4종·설정 키), 읽기 전용 |
 | `agents/penguin-verifier.md` | 검증자 전용 에이전트 타입 — 예산 hook의 표적, 읽기 전용 |
 | `scripts/penguin-verify-budget.py` | PreToolUse hook — 검증자 도구 호출 예산의 결정적 집행 |
 | `scripts/penguin-config-gate.py` | PreToolUse hook — `verify_chain`·`debt_comments` off의 결정적 집행 |
